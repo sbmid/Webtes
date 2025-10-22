@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini AI Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chat-background {
+            background-color: #E5DDD5;
+            background-image: url('https://i.imgur.com/6fOqa2j.png'); /* Subtle WhatsApp-like background pattern */
+        }
+        .chat-bubble-user {
+            background-color: #DCF8C6;
+            align-self: flex-end;
+        }
+        .chat-bubble-ai {
+            background-color: #FFFFFF;
+            align-self: flex-start;
+        }
+        .chat-bubble {
+            max-width: 75%;
+            word-wrap: break-word;
+        }
+        /* Custom scrollbar for a cleaner look */
+        #chat-area::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #chat-area::-webkit-scrollbar-thumb {
+            background: #bdbdbd;
+            border-radius: 3px;
+        }
+        #chat-area::-webkit-scrollbar-thumb:hover {
+            background: #9e9e9e;
+        }
+    </style>
+</head>
+<body class="bg-gray-200 flex items-center justify-center h-screen">
+
+    <div class="w-full max-w-lg h-full md:h-[90vh] md:max-h-[700px] flex flex-col bg-white shadow-2xl rounded-lg overflow-hidden">
+        <!-- Header -->
+        <header class="bg-[#075E54] text-white p-3 flex items-center shadow-md z-10">
+            <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center mr-3">
+                <!-- Gemini Icon SVG -->
+                <svg class="w-6 h-6 text-[#075E54]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M14.5 12C14.5 13.3807 13.3807 14.5 12 14.5C10.6193 14.5 9.5 13.3807 9.5 12C9.5 10.6193 10.6193 9.5 12 9.5C13.3807 9.5 14.5 10.6193 14.5 12Z" fill="currentColor"/>
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M8.99113 2.68412C9.91611 1.63668 11.451 1.3414 12.6953 2.05389L14.7571 3.27553C15.223 3.5513 15.5 4.0202 15.5 4.54305V8.57143C15.5 9.20623 15.2478 9.8138 14.801 10.26L12.5 12.5619L8.99113 2.68412ZM15.0089 21.3159C14.0839 22.3633 12.549 22.6586 11.3047 21.9461L9.24289 20.7245C8.77701 20.4487 8.5 19.9798 8.5 19.4569V15.4286C8.5 14.7938 8.75221 14.1862 9.19904 13.74L11.5 11.4381L15.0089 21.3159Z" fill="currentColor"/>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-semibold">Gemini AI</h1>
+                <p id="status" class="text-xs text-gray-300">online</p>
+            </div>
+        </header>
+
+        <!-- Chat Area -->
+        <main id="chat-area" class="flex-1 p-4 overflow-y-auto chat-background">
+            <div id="chat-container" class="flex flex-col space-y-2">
+                 <!-- Initial AI Message -->
+                <div class="chat-bubble chat-bubble-ai p-3 rounded-lg shadow">
+                    <p class="text-sm">Halo! Saya Gemini. Ada yang bisa saya bantu hari ini?</p>
+                    <p class="text-right text-xs text-gray-500 mt-1">Just now</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Input Area -->
+        <footer class="bg-[#F0F0F0] p-3 flex items-center">
+            <input type="text" id="userInput" placeholder="Ketik pesan..." class="flex-1 p-3 border-none rounded-full focus:outline-none focus:ring-2 focus:ring-[#128C7E] transition duration-200 text-sm" autocomplete="off">
+            <button id="sendButton" class="ml-3 bg-[#128C7E] text-white p-3 rounded-full hover:bg-[#075E54] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#128C7E] transition duration-200">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-send"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+        const statusElement = document.getElementById('status');
+        const chatArea = document.getElementById('chat-area');
+
+        // --- Gemini API Configuration ---
+        const API_KEY = ""; // API Key will be injected by the environment. Do not change.
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+        const MAX_RETRIES = 5;
+
+        /**
+         * Appends a message to the chat container.
+         * @param {string} text The message text.
+         * @param {string} sender 'user' or 'ai'.
+         */
+        function displayMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            const messageContent = document.createElement('p');
+            const messageTime = document.createElement('p');
+
+            messageDiv.className = `chat-bubble p-3 rounded-lg shadow flex flex-col ${sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
+            messageContent.className = 'text-sm';
+            messageContent.textContent = text;
+            
+            messageTime.className = 'text-right text-xs text-gray-500 mt-1';
+            const now = new Date();
+            messageTime.textContent = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+            messageDiv.appendChild(messageContent);
+            messageDiv.appendChild(messageTime);
+            chatContainer.appendChild(messageDiv);
+            
+            // Scroll to the latest message
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        /**
+         * Shows the AI typing indicator.
+         */
+        function showTypingIndicator() {
+            statusElement.textContent = 'sedang mengetik...';
+        }
+
+        /**
+         * Hides the AI typing indicator.
+         */
+        function hideTypingIndicator() {
+            statusElement.textContent = 'online';
+        }
+
+        /**
+         * Calls the Gemini API with exponential backoff for retries.
+         * @param {string} prompt The user's input.
+         * @param {number} attempt The current retry attempt number.
+         */
+        async function callGeminiAPI(prompt, attempt = 1) {
+            showTypingIndicator();
+            try {
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                };
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    // If response is not OK, but it's a rate limit error, we can retry.
+                    if (response.status === 429 && attempt < MAX_RETRIES) {
+                        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        return callGeminiAPI(prompt, attempt + 1);
+                    }
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+                
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const aiResponse = candidate.content.parts[0].text;
+                    displayMessage(aiResponse, 'ai');
+                } else {
+                    throw new Error("Respons tidak valid dari API.");
+                }
+
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                displayMessage("Maaf, terjadi kesalahan. Silakan coba lagi nanti.", 'ai');
+            } finally {
+                hideTypingIndicator();
+            }
+        }
+
+        /**
+         * Handles the user sending a message.
+         */
+        function handleSendMessage() {
+            const message = userInput.value.trim();
+            if (message) {
+                displayMessage(message, 'user');
+                userInput.value = '';
+                callGeminiAPI(message);
+            }
+        }
+
+        // Event Listeners
+        sendButton.addEventListener('click', handleSendMessage);
+        userInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent new line on Enter
+                handleSendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
+
